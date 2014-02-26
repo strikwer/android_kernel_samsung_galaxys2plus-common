@@ -54,9 +54,10 @@ static int controlset(const char *name, unsigned int *value, int index);
 static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff);
 
 
-#define MIN_TIMEOUT 150
+#define MIN_TIMEOUT 100
 #define MAX_TIMEOUT 500
 #define DEFAULT_TIMEOUT 170
+#define GPIO_MOTOR_EN  189
 
 void vibtonz_en(bool en)
 {
@@ -128,6 +129,11 @@ static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff)
 		}
 	}
 #endif
+
+	if ( onoff == 1)
+		gpio_set_value(GPIO_MOTOR_EN, 1);
+	else 
+		gpio_set_value(GPIO_MOTOR_EN, 0);
 	return;
 }
 

@@ -53,10 +53,6 @@ static t_vib_desc vib_desc;
 static int controlset(const char *name, unsigned int *value, int index);
 static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff);
 
-
-#define MIN_TIMEOUT 100
-#define MAX_TIMEOUT 500
-#define DEFAULT_TIMEOUT 170
 #define GPIO_MOTOR_EN  189
 
 void vibtonz_en(bool en)
@@ -150,10 +146,9 @@ static void vibrator_enable_set_timeout(struct timed_output_dev *sdev, int timeo
 
 	vibrator_control(vib_iter, 1);
 
-	valid_timeout=(timeout > MIN_TIMEOUT) ? timeout: DEFAULT_TIMEOUT;
-	printk(KERN_INFO "%s : Vibrator timeout = %d \n", __func__, valid_timeout);
+	printk(KERN_INFO "%s : Vibrator timeout = %d \n", __func__, timeout);
 
-	mod_timer(&vib_iter->vib_timer, jiffies + msecs_to_jiffies(valid_timeout));
+	mod_timer(&vib_iter->vib_timer, jiffies + msecs_to_jiffies(timeout));
 }
 
 static void vibrator_off_work_func(struct work_struct *work)

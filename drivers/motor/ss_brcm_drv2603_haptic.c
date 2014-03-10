@@ -52,6 +52,7 @@ typedef struct
 static t_vib_desc vib_desc;
 static int controlset(const char *name, unsigned int *value, int index);
 static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff);
+static int pwm_val = 50;
 
 #define GPIO_MOTOR_EN  189
 
@@ -103,6 +104,17 @@ void vibtonz_pwm(int nForce)
 
 EXPORT_SYMBOL(vibtonz_pwm);
 
+void drv2603_gpio_en(bool en)
+{
+
+	if (en == 1)
+		gpio_set_value(GPIO_MOTOR_EN, 1);
+	else
+		gpio_set_value(GPIO_MOTOR_EN, 0);
+		
+	return;
+	
+}
 
 static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff)
 {
@@ -125,11 +137,19 @@ static void vibrator_control(t_vib_desc *vib_iter, unsigned char onoff)
 		}
 	}
 #endif
+	if (onoff == 1)
+	{
+		drv2603_gpio_en(1);
+		pwm_start(vib_iter->pwm);
+		vibtonz_pwm(pwm_val);
+	}
+	else
+	{
+		pwm_stop(vib_iter->pwm);
+		drv2603_gpio_en(0);
+	}
+	
 
-	if ( onoff == 1)
-		gpio_set_value(GPIO_MOTOR_EN, 1);
-	else 
-		gpio_set_value(GPIO_MOTOR_EN, 0);
 	return;
 }
 
@@ -172,6 +192,49 @@ static void vibrator_get_remaining_time(struct timed_output_dev *sdev)
 	printk(KERN_INFO "Vibrator : remaining time : %dms \n", retTime);
 }
 
+static ssize_t pwm_val_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int count;
+
+	count = sprintf(buf, "%lu\n", pwm_val);
+	pr_debug("[VIB] pwm_val: %lu\n", pwm_val);
+
+	return count;
+}
+
+ssize_t pwm_val_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t size)
+{
+	if (kstrtoul(buf, 0, &pwm_val))
+		pr_err("[VIB] %s: error on storing pwm_val\n", __func__); 
+
+	pr_info("[VIB] %s: pwm_val=%lu\n", __func__, pwm_val);
+
+	return size;
+}
+static DEVICE_ATTR(pwm_val, S_IRUGO | S_IWUSR,
+		pwm_val_show, pwm_val_store);
+
+static int create_vibrator_sysfs(void)
+{
+	int ret;
+	struct kobject *vibrator_kobj;
+	vibrator_kobj = kobject_create_and_add("vibrator", NULL);
+	if (unlikely(!vibrator_kobj))
+		return -ENOMEM;
+
+	ret = sysfs_create_file(vibrator_kobj,
+			&dev_attr_pwm_val.attr);
+	if (unlikely(ret < 0)) {
+		pr_err("[VIB] sysfs_create_file failed: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 
 static int ss_brcm_haptic_probe(struct platform_device *pdev)
 {
@@ -201,13 +264,14 @@ static int ss_brcm_haptic_probe(struct platform_device *pdev)
 
 	regulator_enable(vib_iter->vib_regulator);
 #endif
-	vib_iter->gpio_en = pdata->gpio_en;
+	vib_iter->gpio_en = &drv2603_gpio_en;
 	vib_iter->pwm = pwm_request(pdata->pwm_name, "vibrator");
 	if (IS_ERR(vib_iter->pwm)) 
 	{
 		pr_err("[VIB] Failed to request pwm.\n");
 		 return -EFAULT;
 	}
+	
 	vib_iter->pwm_duty = pdata->pwm_duty;
 	vib_iter->pwm_period = pdata->pwm_period_ns;
 	vib_iter->pwm_polarity = pdata->polarity;
@@ -232,6 +296,8 @@ static int ss_brcm_haptic_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, vib_iter);
 
 	INIT_WORK(&vib_iter->off_work, vibrator_off_work_func);
+	
+	create_vibrator_sysfs();
 	
 	vib_iter->initialized = 1;
 	printk("%s : ss vibrator probe\n", __func__);
